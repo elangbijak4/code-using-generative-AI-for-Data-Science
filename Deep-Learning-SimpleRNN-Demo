@@ -1,0 +1,66 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import SimpleRNN, Dense
+
+# Baca dataset
+url = 'path_to_your_dataset.csv'  # Gantilah path dengan lokasi dataset Anda
+df = pd.read_csv(url, parse_dates=['Date'])
+
+# Analisis data
+print(df.info())
+print(df.describe())
+print(df.head())
+
+# Pilih fitur yang akan digunakan
+features = ['Open', 'High', 'Low', 'Close', 'Volume']
+target = 'Adj Close'
+
+# Hapus baris yang mengandung nilai NaN
+df.dropna(inplace=True)
+
+# Pisahkan fitur dan target
+X = df[features].values
+y = df[target].values
+
+# Normalisasi fitur menggunakan Min-Max Scaler
+scaler = MinMaxScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Pisahkan data menjadi data latih dan data uji
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+# Reshape input untuk kompatibilitas dengan RNN
+X_train = X_train.reshape((X_train.shape[0], 1, X_train.shape[1]))
+X_test = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
+
+# Bangun model RNN
+model = Sequential()
+model.add(SimpleRNN(50, activation='relu', input_shape=(1, X_train.shape[2])))
+model.add(Dense(1))
+
+# Kompilasi model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Latih model
+model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_test, y_test))
+
+# Evaluasi model pada data uji
+loss = model.evaluate(X_test, y_test)
+print(f'Mean Squared Error on Test Data: {loss}')
+
+# Visualisasi hasil prediksi dan data aktual
+y_pred = model.predict(X_test)
+
+plt.figure(figsize=(12, 6))
+plt.plot(y_test, label='Actual')
+plt.plot(y_pred, label='Predicted')
+plt.title('Actual vs Predicted Adj Close Prices using Simple RNN')
+plt.xlabel('Data Point')
+plt.ylabel('Adj Close Price')
+plt.legend()
+plt.show()
