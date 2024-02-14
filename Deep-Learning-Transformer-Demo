@@ -1,0 +1,67 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, MultiHeadAttention, Embedding, Flatten, LayerNormalization
+
+# Baca dataset
+file_path = 'TLKM.JK.csv'
+df = pd.read_csv(file_path, parse_dates=['Date'])
+
+# Pilih fitur yang akan digunakan
+features = ['Open', 'High', 'Low', 'Close', 'Volume']
+target = 'Close'
+
+# Hapus baris yang mengandung nilai NaN
+df.dropna(inplace=True)
+
+# Normalisasi fitur menggunakan Min-Max Scaler
+scaler = MinMaxScaler()
+df_scaled = pd.DataFrame(scaler.fit_transform(df[features]), columns=features)
+df_scaled[target] = scaler.fit_transform(df[[target]])
+
+# Pisahkan fitur dan target
+X = df_scaled[features].values
+y = df_scaled[target].values
+
+# Pisahkan data menjadi data latih dan data uji
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Bangun model Transformer sederhana
+def create_transformer_model(input_shape):
+    inputs = Input(shape=input_shape)
+    transformer_layer = MultiHeadAttention(num_heads=4, key_dim=input_shape[1])(inputs, inputs)
+    normalization_layer = LayerNormalization(epsilon=1e-6)(transformer_layer)
+    flatten_layer = Flatten()(normalization_layer)
+    output_layer = Dense(1)(flatten_layer)
+    model = Model(inputs=inputs, outputs=output_layer)
+    return model
+
+# Reshape input untuk kompatibilitas dengan Transformer
+X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+# Bangun model
+model = create_transformer_model(input_shape=(X_train.shape[1], X_train.shape[2]))
+
+# Kompilasi model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Latih model
+model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
+
+# Evaluasi model
+loss = model.evaluate(X_test, y_test)
+print(f'Mean Squared Error on Test Data: {loss}')
+
+# Prediksi menggunakan model
+predictions = model.predict(X_test)
+
+# Plot hasil prediksi
+plt.plot(y_test, label='True Values')
+plt.plot(predictions, label='Predictions')
+plt.legend()
+plt.show()
