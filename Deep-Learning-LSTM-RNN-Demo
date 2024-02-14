@@ -1,0 +1,116 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+
+# Membaca dataset
+df = pd.read_csv('TLKM.JK.csv')
+
+df.head()
+
+df.isna().sum()
+
+# Visualisasi data harga penutupan
+plt.figure(figsize=(8,6))
+plt.title('Riwayat Harga Penutupan Saham TLKM')
+df['Date'] = pd.to_datetime(df['Date'])
+plt.plot(df['Date'], df['Close'])
+plt.xlabel('Date', fontsize=18)
+plt.ylabel('Harga Penutupan (Rp)', fontsize=18)
+plt.show()
+
+# Memproses kolom 'Date' dan 'Close'
+df['Date'] = pd.to_datetime(df['Date'])
+df = df.set_index('Date')
+data = df['Close'].values.reshape(-1, 1)
+
+len(data)
+
+# Normalisasi data menggunakan MinMaxScaler
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data)
+
+scaled_data
+
+# Membuat dataset latih dan uji
+train_size = int(len(scaled_data) * 0.8)
+train_data, test_data = scaled_data[:train_size], scaled_data[train_size:]
+
+train_size
+
+len(train_data)
+
+len(test_data)
+
+len(scaled_data)
+
+# Fungsi untuk membuat dataset dengan time steps
+def create_dataset(dataset, time_steps=1):
+    X, y = [], []
+    for i in range(len(dataset) - time_steps):
+        a = dataset[i:(i + time_steps), 0]
+        X.append(a)
+        y.append(dataset[i + time_steps, 0])
+    return np.array(X), np.array(y)
+
+# Menentukan jumlah time steps
+time_steps = 10
+
+# Membuat dataset latih dan uji menggunakan fungsi create_dataset
+X_train, y_train = create_dataset(train_data, time_steps)
+X_test, y_test = create_dataset(test_data, time_steps)
+
+X_train
+
+y_train
+
+# Mengubah bentuk dataset menjadi (jumlah sampel, time steps, fitur)
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+# Membangun model LSTM
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+model.add(LSTM(units=50))
+model.add(Dense(units=1))
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+from tensorflow.keras.utils import plot_model
+
+# Plot arsitektur model
+plot_model(model, to_file='model_plot.png', show_shapes=True, show_layer_names=True)
+
+# Melatih model
+model.fit(X_train, y_train, epochs=10, batch_size=32)
+
+# Prediksi menggunakan model
+predictions = model.predict(X_test)
+predictions = scaler.inverse_transform(predictions)
+
+# Menghitung nilai RMSE (Root Mean Squared Error)
+rmse = np.sqrt(mean_squared_error(df['Close'].values[train_size + time_steps:], predictions))
+print(f'Root Mean Squared Error (RMSE): {rmse}')
+
+# Plot hasil prediksi
+train = df[:train_size + time_steps]
+test = df[train_size + time_steps:]
+test['Predictions'] = predictions
+
+# Plot hasil prediksi
+train = df[:train_size + time_steps]
+test = df[train_size + time_steps:].copy()  # Salin DataFrame agar tidak terkait langsung dengan df
+test['Predictions'] = predictions
+
+plt.figure(figsize=(16, 8))
+plt.title('Prediksi Pergerakan Saham TLKM.JK menggunakan LSTM')
+plt.xlabel('Date')
+plt.ylabel('Close Price (Rp)')
+plt.plot(train['Close'], label='Data Latih')
+plt.plot(test['Close'], label='Data Uji')
+plt.plot(test['Predictions'], label='Prediksi')
+plt.legend()
+plt.show()
