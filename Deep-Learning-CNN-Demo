@@ -1,0 +1,83 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense
+
+# Baca dataset
+df = pd.read_csv('path_to_your_dataset.csv')  # Gantilah dengan path dataset Anda
+
+# Konversi kolom 'Date' ke datetime
+df['Date'] = pd.to_datetime(df['Date'])
+
+# Sorting berdasarkan tanggal
+df = df.sort_values('Date')
+
+# Pilih kolom yang akan digunakan untuk prediksi (misal: Close)
+data = df[['Close']].values
+
+# Normalisasi data menggunakan MinMaxScaler
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data)
+
+# Fungsi untuk membuat dataset dengan time steps
+def create_dataset(dataset, time_steps=1):
+    X, y = [], []
+    for i in range(len(dataset) - time_steps):
+        a = dataset[i:(i + time_steps), 0]
+        X.append(a)
+        y.append(dataset[i + time_steps, 0])
+    return np.array(X), np.array(y)
+
+# Pilih jumlah time steps
+time_steps = 10
+
+# Membuat dataset
+X, y = create_dataset(scaled_data, time_steps)
+
+# Memisahkan data menjadi data latih dan data uji
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Reshape input untuk CNN
+X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+
+# Membangun model CNN
+model = Sequential()
+model.add(Conv1D(filters=64, kernel_size=2, activation='relu', input_shape=(time_steps, 1)))
+model.add(MaxPooling1D(pool_size=2))
+model.add(Flatten())
+model.add(Dense(50, activation='relu'))
+model.add(Dense(1))
+
+# Kompilasi model
+model.compile(optimizer='adam', loss='mse')
+
+# Melatih model
+model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_test, y_test))
+
+# Prediksi menggunakan data uji
+y_pred = model.predict(X_test)
+
+# Denormalisasi hasil prediksi dan target
+y_pred_denormalized = scaler.inverse_transform(y_pred)
+y_test_denormalized = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+# Visualisasi hasil prediksi dan aktual
+plt.figure(figsize=(12, 6))
+plt.plot(y_test_denormalized, label='Actual Close Price')
+plt.plot(y_pred_denormalized, label='Predicted Close Price')
+plt.title('Actual vs Predicted Close Price')
+plt.xlabel('Time')
+plt.ylabel('Close Price')
+plt.legend()
+plt.show()
+
+# Menghitung Mean Squared Error
+mse = mean_squared_error(y_test_denormalized, y_pred_denormalized)
+print(f'Mean Squared Error: {mse}')
